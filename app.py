@@ -1,30 +1,55 @@
 import os
-import re
-import tempfile
-import streamlit as st
-import sounddevice as sd
-from scipy.io.wavfile import write
-from openai import OpenAI
-from anthropic import Anthropic
-from dotenv import load_dotenv
 import csv
 import io
+import tempfile
+import streamlit as st
+from dotenv import load_dotenv
+from openai import OpenAI
+from anthropic import Anthropic
 
-# Load API keys
-load_dotenv()
-openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+# -----------------------------
+# CONFIG / KEYS (local + cloud)
+# -----------------------------
+load_dotenv()  # local dev
+
+OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY"))
+ANTHROPIC_API_KEY = st.secrets.get("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY"))
+
+if not OPENAI_API_KEY or not ANTHROPIC_API_KEY:
+    st.error(
+        "Missing API keys. Add OPENAI_API_KEY and ANTHROPIC_API_KEY to Streamlit Secrets "
+        "or to a local .env file."
+    )
+    st.stop()
+
+openai_client = OpenAI(api_key=OPENAI_API_KEY)
+anthropic_client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
 
-# --- TRANSCRIPTION ---
+# -----------------------------
+# TRANSCRIPTION
+# -----------------------------
+def transcribe_file(filepath: str) -> str:
+    """
+    Transcribe an audio/video file using OpenAI's Whisper API.
 
-def transcribe_file(filepath):
-    supported = ['.flac', '.m4a', '.mp3', '.mp4', '.mpeg', '.mpga', '.oga', '.ogg', '.wav', '.webm']
+    Note: Whisper API supports these formats:
+    flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
+    """
+    supported = [
+        ".flac", ".m4a", ".mp3", ".mp4", ".mpeg",
+        ".mpga", ".oga", ".ogg", ".wav", ".webm"
+    ]
     ext = os.path.splitext(filepath)[1].lower()
+
+    # If user uploads .caf or other unsupported format, we currently do not
+    # convert on Streamlit Cloud because ffmpeg may not be available.
     if ext not in supported:
-        converted = filepath.replace(ext, "_converted.mp3")
-        os.system(f'ffmpeg -i "{filepath}" "{converted}" -y -loglevel quiet')
-        filepath = converted
+        raise ValueError(
+            f"Unsupported file type: {ext}. Please upload one of: "
+            f"{', '.join(supported)}"
+        )
+
     with open(filepath, "rb") as audio_file:
         result = openai_client.audio.transcriptions.create(
             model="whisper-1",
@@ -33,19 +58,13 @@ def transcribe_file(filepath):
     return result.text
 
 
-def record_and_transcribe(duration=60):
-    sample_rate = 44100
-    with st.spinner(f"🎤 Recording for {duration} seconds..."):
-        audio = sd.rec(int(duration * sample_rate), samplerate=sample_rate, channels=1, dtype='int16')
-        sd.wait()
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
-        write(tmp.name, sample_rate, audio)
-        return transcribe_file(tmp.name)
-
-
-# --- TASK EXTRACTION ---
-
-def extract_tasks(transcript):
+# -----------------------------
+# TASK EXTRACTION
+# -----------------------------
+def extract_tasks(transcript: str) -> str:
+    """
+    Ask Claude to extract tasks in a strict, parseable format.
+    """
     message = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
@@ -55,7 +74,7 @@ def extract_tasks(transcript):
                 "content": f"""You are a helpful assistant that extracts action items from meeting transcripts.
 
 Extract all tasks and action items from the transcript below.
-Return them as a numbered list in this exact format for each task:
+Return them as blocks in this exact format for each task:
 
 TASK: <what needs to be done>
 WHO: <person responsible, or 'Unassigned' if unknown>
@@ -63,6 +82,7 @@ DEADLINE: <deadline or timeframe, or 'Not specified' if unknown>
 ---
 
 Only return the tasks in this format, nothing else.
+If there are no tasks, return exactly: NO_TASKS
 
 Transcript:
 {transcript}"""
@@ -72,56 +92,77 @@ Transcript:
     return message.content[0].text
 
 
-def parse_tasks(raw):
-    """Parse Claude's structured output into a list of task dicts."""
+def parse_tasks(raw: str) -> list[dict]:
+    """
+    Parse Claude's structured output into:
+    [{"what": "...", "who": "...", "deadline": "..."}, ...]
+    """
+    raw = (raw or "").strip()
+    if raw == "NO_TASKS":
+        return []
+
     tasks = []
-    blocks = raw.strip().split("---")
+    blocks = raw.split("---")
     for block in blocks:
         block = block.strip()
         if not block:
             continue
-        task = {}
+
+        task = {"what": "", "who": "Unassigned", "deadline": "Not specified"}
         for line in block.splitlines():
+            line = line.strip()
             if line.startswith("TASK:"):
-                task["what"] = line.replace("TASK:", "").strip()
+                task["what"] = line.replace("TASK:", "", 1).strip()
             elif line.startswith("WHO:"):
-                task["who"] = line.replace("WHO:", "").strip()
+                task["who"] = line.replace("WHO:", "", 1).strip() or "Unassigned"
             elif line.startswith("DEADLINE:"):
-                task["deadline"] = line.replace("DEADLINE:", "").strip()
-        if "what" in task:
+                task["deadline"] = line.replace("DEADLINE:", "", 1).strip() or "Not specified"
+
+        if task["what"]:
             tasks.append(task)
+
     return tasks
 
 
-def tasks_to_csv(tasks):
+# -----------------------------
+# EXPORT HELPERS
+# -----------------------------
+def tasks_to_csv(tasks: list[dict]) -> str:
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=["what", "who", "deadline"])
     writer.writeheader()
     for t in tasks:
-        writer.writerow({"what": t.get("what", ""), "who": t.get("who", ""), "deadline": t.get("deadline", "")})
+        writer.writerow(
+            {
+                "what": t.get("what", ""),
+                "who": t.get("who", ""),
+                "deadline": t.get("deadline", ""),
+            }
+        )
     return output.getvalue()
 
 
-def tasks_to_txt(tasks):
-    lines = ["EXTRACTED TASKS\n" + "=" * 40]
+def tasks_to_txt(tasks: list[dict]) -> str:
+    lines = ["EXTRACTED TASKS", "=" * 40]
     for i, t in enumerate(tasks, 1):
-        lines.append(f"\nTask {i}")
+        lines.append("")
+        lines.append(f"Task {i}")
         lines.append(f"  What:     {t.get('what', '')}")
         lines.append(f"  Who:      {t.get('who', '')}")
         lines.append(f"  Deadline: {t.get('deadline', '')}")
     return "\n".join(lines)
 
 
-# --- PAGE CONFIG ---
-
+# -----------------------------
+# UI / STYLING
+# -----------------------------
 st.set_page_config(page_title="Meeting Task Extractor", page_icon="🎙️", layout="centered")
 
-st.markdown("""
+st.markdown(
+    """
 <style>
-    /* Background */
     .stApp { background-color: #0f1117; }
 
-    /* Title */
     .main-title {
         font-size: 2.2rem;
         font-weight: 800;
@@ -134,7 +175,6 @@ st.markdown("""
         margin-bottom: 1.5rem;
     }
 
-    /* Task cards */
     .task-card {
         background: #1c1e2e;
         border: 1px solid #2e3148;
@@ -152,9 +192,6 @@ st.markdown("""
         font-size: 0.82rem;
         color: #8b8fa8;
     }
-    .task-meta span {
-        margin-right: 1.2rem;
-    }
     .badge {
         display: inline-block;
         padding: 2px 10px;
@@ -166,7 +203,6 @@ st.markdown("""
     .badge-who { background: #1e3a5f; color: #60a5fa; }
     .badge-deadline { background: #2d1f4e; color: #a78bfa; }
 
-    /* Section headers */
     .section-header {
         font-size: 1.1rem;
         font-weight: 700;
@@ -175,27 +211,20 @@ st.markdown("""
         padding-bottom: 0.4rem;
         border-bottom: 1px solid #2e3148;
     }
-
-    /* Export buttons row */
-    .export-row {
-        display: flex;
-        gap: 0.8rem;
-        margin-top: 1rem;
-    }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-
-# --- HEADER ---
 st.markdown('<div class="main-title">🎙️ Meeting Task Extractor</div>', unsafe_allow_html=True)
-st.markdown('<div class="main-subtitle">Upload a recording or use your microphone to automatically extract tasks from any meeting or call.</div>', unsafe_allow_html=True)
+st.markdown(
+    '<div class="main-subtitle">Upload a recording to automatically extract tasks from any meeting or call.</div>',
+    unsafe_allow_html=True,
+)
 st.divider()
 
 
-# --- PROCESS & DISPLAY ---
-
-def display_results(transcript, tasks):
-    # Transcript expander
+def display_results(transcript: str, tasks: list[dict]):
     st.markdown('<div class="section-header">📝 Transcript</div>', unsafe_allow_html=True)
     with st.expander("Click to view full transcript"):
         st.write(transcript)
@@ -204,75 +233,86 @@ def display_results(transcript, tasks):
         st.info("No tasks or action items were found in this recording.")
         return
 
-    # Task count
-    st.markdown(f'<div class="section-header">✅ Extracted Tasks &nbsp;<span style="color:#8b8fa8;font-size:0.9rem;">({len(tasks)} found)</span></div>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="section-header">✅ Extracted Tasks '
+        f'<span style="color:#8b8fa8;font-size:0.9rem;">({len(tasks)} found)</span></div>',
+        unsafe_allow_html=True,
+    )
 
-    # Checkboxes + cards
-    completed = []
     for i, task in enumerate(tasks):
-        col1, col2 = st.columns([0.05, 0.95])
+        col1, col2 = st.columns([0.08, 0.92])
         with col1:
-            done = st.checkbox("", key=f"task_{i}")
-            completed.append(done)
+            done = st.checkbox("Done", key=f"task_{i}", label_visibility="hidden")
         with col2:
             style = "opacity:0.45;text-decoration:line-through;" if done else ""
-            st.markdown(f"""
-            <div class="task-card" style="{style}">
-                <div class="task-title">{task.get('what', '')}</div>
-                <div class="task-meta">
-                    <span class="badge badge-who">👤 {task.get('who', 'Unassigned')}</span>
-                    <span class="badge badge-deadline">🗓 {task.get('deadline', 'Not specified')}</span>
+            st.markdown(
+                f"""
+                <div class="task-card" style="{style}">
+                    <div class="task-title">{task.get('what', '')}</div>
+                    <div class="task-meta">
+                        <span class="badge badge-who">👤 {task.get('who', 'Unassigned')}</span>
+                        <span class="badge badge-deadline">🗓 {task.get('deadline', 'Not specified')}</span>
+                    </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """,
+                unsafe_allow_html=True,
+            )
 
-    # Export
     st.markdown('<div class="section-header">📤 Export</div>', unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    with col1:
+    colA, colB = st.columns(2)
+    with colA:
         st.download_button(
             label="⬇️ Download as CSV",
             data=tasks_to_csv(tasks),
             file_name="tasks.csv",
             mime="text/csv",
-            use_container_width=True
+            use_container_width=True,
         )
-    with col2:
+    with colB:
         st.download_button(
             label="⬇️ Download as TXT",
             data=tasks_to_txt(tasks),
             file_name="tasks.txt",
             mime="text/plain",
-            use_container_width=True
+            use_container_width=True,
         )
 
 
-# --- TABS ---
-tab1, tab2 = st.tabs(["📁 Upload File", "🎤 Record Microphone"])
+# -----------------------------
+# MAIN: FILE UPLOAD ONLY
+# -----------------------------
+st.subheader("📁 Upload File")
 
-with tab1:
-    uploaded_file = st.file_uploader(
-        "Upload your audio or video file",
-        type=["mp3", "mp4", "wav", "m4a", "ogg", "webm", "flac", "caf", "mpeg"]
-    )
-    if uploaded_file:
-        st.audio(uploaded_file)
-        if st.button("Extract Tasks", key="file_btn", type="primary"):
-            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as tmp:
-                tmp.write(uploaded_file.read())
-                tmp_path = tmp.name
+uploaded_file = st.file_uploader(
+    "Upload your audio or video file",
+    type=["mp3", "mp4", "wav", "m4a", "ogg", "webm", "flac", "mpeg", "mpga", "oga"],
+    help="For Streamlit Cloud, upload a supported format (mp3, wav, m4a, mp4, etc.).",
+)
+
+if uploaded_file:
+    st.audio(uploaded_file)
+
+    if st.button("Extract Tasks", type="primary"):
+        suffix = os.path.splitext(uploaded_file.name)[1] or ".mp3"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+
+        try:
             with st.spinner("🎙️ Transcribing audio..."):
                 transcript = transcribe_file(tmp_path)
+
             with st.spinner("🤖 Extracting tasks..."):
                 raw = extract_tasks(transcript)
                 tasks = parse_tasks(raw)
+
             display_results(transcript, tasks)
 
-with tab2:
-    duration = st.slider("Recording duration (seconds)", min_value=10, max_value=300, value=60, step=10)
-    if st.button("Start Recording", key="mic_btn", type="primary"):
-        transcript = record_and_transcribe(duration)
-        with st.spinner("🤖 Extracting tasks..."):
-            raw = extract_tasks(transcript)
-            tasks = parse_tasks(raw)
-        display_results(transcript, tasks)
+        except ValueError as e:
+            st.error(str(e))
+        finally:
+            # Best effort cleanup
+            try:
+                os.remove(tmp_path)
+            except Exception:
+                pass
