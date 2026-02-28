@@ -1,99 +1,148 @@
-# Meeting Task Extractor
+Meeting Task Extractor
 
-An AI-powered tool that automatically transcribes meetings and calls, then extracts actionable tasks — so you never miss a follow-up again.
+AI-powered web app that transcribes meeting recordings and automatically extracts structured action items with owners and deadlines.
 
----
+Built with Python, Streamlit, OpenAI Whisper, and Anthropic Claude.
 
-## Features
+Overview
 
-- Upload audio or video files — supports MP3, MP4, WAV, M4A, OGG, WEBM, FLAC, CAF, and more
-- Live microphone recording — record directly from your browser
-- Auto format conversion — unsupported formats are automatically converted via ffmpeg
-- Full transcript view — collapsible transcript for every recording
-- Smart task extraction — identifies what needs to be done, who is responsible, and any deadlines
-- Interactive checkboxes — check off tasks as you complete them
-- Export to CSV or TXT — save and share your task list
+This application allows users to upload an audio or video recording of a meeting and automatically:
 
----
+Transcribe speech to text using OpenAI Whisper
 
-## Tech Stack
+Extract action items using Claude
 
-- UI: Streamlit
-- Transcription: OpenAI Whisper API
-- Task Extraction: Anthropic Claude API
-- Audio Recording: sounddevice + scipy
-- Format Conversion: ffmpeg
+Display tasks with responsible parties and deadlines
 
----
+Export tasks as CSV or TXT
 
-## Getting Started
+The goal is to turn unstructured conversations into clear, actionable outputs.
 
-### 1. Clone the repo
+Live Demo
 
-git clone https://github.com/jozuna19/meeting-task-extractor.git
+Deployed on Streamlit Cloud.
+
+Upload supported audio formats such as:
+
+mp3
+
+m4a
+
+wav
+
+mp4
+
+ogg
+
+webm
+
+flac
+
+Note: Microphone recording is supported in the local development version only. The deployed cloud version uses file upload due to server-side audio hardware limitations.
+
+Features
+
+Audio/video file upload
+
+Automatic transcription (Whisper API)
+
+AI-powered task extraction (Claude API)
+
+Structured task formatting:
+
+What needs to be done
+
+Who is responsible
+
+Deadline or timeframe
+
+Interactive checkboxes
+
+Export to CSV
+
+Export to TXT
+
+Clean dark-mode UI
+
+Tech Stack
+
+Python
+
+Streamlit
+
+OpenAI Whisper API
+
+Anthropic Claude API
+
+python-dotenv
+
+How It Works
+
+User uploads an audio file
+
+File is temporarily stored server-side
+
+Whisper generates a transcript
+
+Claude analyzes the transcript and extracts action items
+
+Results are parsed into structured task objects
+
+Tasks are displayed and available for export
+
+Local Development Setup
+
+Clone the repository:
+
+git clone https://github.com/your-username/meeting-task-extractor.git
 cd meeting-task-extractor
 
-### 2. Install dependencies
+Install dependencies:
 
-pip install streamlit openai anthropic sounddevice scipy python-dotenv
-brew install ffmpeg
+pip install -r requirements.txt
 
-### 3. Add your API keys
+Create a .env file:
 
-Create a .env file in the project root:
+OPENAI_API_KEY="your_openai_key"
+ANTHROPIC_API_KEY="your_anthropic_key"
 
-OPENAI_API_KEY=your-openai-key-here
-ANTHROPIC_API_KEY=your-anthropic-key-here
-
-You will need an OpenAI account and an Anthropic account with billing enabled. Both offer low-cost pay-as-you-go pricing — a typical meeting costs less than $0.05 to process.
-
-### 4. Run the app
+Run the app:
 
 streamlit run app.py
+Deployment
 
-Open your browser to http://localhost:8501 and you are good to go.
+This project is deployed using Streamlit Cloud.
 
----
+Secrets are stored securely using Streamlit’s built-in Secrets manager in TOML format:
 
-## Project Structure
+OPENAI_API_KEY = "your_openai_key"
+ANTHROPIC_API_KEY = "your_anthropic_key"
+Future Improvements
 
-meeting-task-extractor/
-├── app.py            # Main Streamlit app
-├── .env              # API keys (not committed to git)
-├── .gitignore        # Excludes .env and temp files
-└── README.md
+Browser-based microphone recording
 
----
+Speaker diarization (identify who said what)
 
-## Important: Keep your API keys safe
+Notion/Todoist integration
 
-Make sure your .env file is listed in .gitignore before pushing to GitHub:
+Automatic calendar follow-up generation
 
-.env
-*.wav
-*_converted.mp3
-__pycache__/
+PDF export
 
----
+Meeting summary generation
 
-## How It Works
+Why This Project
 
-1. Input — Upload an audio/video file or record from your microphone
-2. Transcription — The audio is sent to OpenAI Whisper, which converts speech to text
-3. Extraction — The transcript is sent to Claude with a prompt asking it to identify tasks, owners, and deadlines
-4. Display — Tasks are shown as interactive cards you can check off, with options to export
+This project demonstrates:
 
----
+API integration across multiple AI providers
 
-## Future Ideas
+File handling and temporary storage
 
-- Push tasks directly to Notion or Todoist
-- Speaker detection to identify who said what
-- Email summary after each meeting
-- Deploy to Streamlit Cloud for access anywhere
+Structured LLM prompting and response parsing
 
----
+Cloud deployment
 
-## Acknowledgements
+Production-style secrets management
 
-Built with OpenAI Whisper and Anthropic Claude.
+Real-world AI workflow automation
