@@ -1,28 +1,38 @@
-Meeting Task Extractor
+🎙 Meeting Task Extractor
 
-AI-powered web app that transcribes meeting recordings and automatically extracts structured action items with owners and deadlines.
+Transcribe meetings into structured action items — automatically.
+
+AI-powered web application that converts meeting recordings into clear, actionable task lists with owners and deadlines.
 
 Built with Python, Streamlit, OpenAI Whisper, and Anthropic Claude.
 
-Overview
+✨ What It Does
 
-This application allows users to upload an audio or video recording of a meeting and automatically:
+Upload a meeting recording and the app will:
 
-Transcribe speech to text using OpenAI Whisper
+🎧 Transcribe speech to text using Whisper
 
-Extract action items using Claude
+🧠 Extract action items using Claude
 
-Display tasks with responsible parties and deadlines
+🗂 Identify:
 
-Export tasks as CSV or TXT
+What needs to be done
 
-The goal is to turn unstructured conversations into clear, actionable outputs.
+Who is responsible
 
-Live Demo
+Any deadlines or timeframes
+
+✅ Display tasks as interactive checkable cards
+
+📤 Export tasks as CSV or TXT
+
+Turns messy conversations into structured execution.
+
+🌐 Live Demo
 
 Deployed on Streamlit Cloud.
 
-Upload supported audio formats such as:
+Supported file formats:
 
 mp3
 
@@ -38,59 +48,45 @@ webm
 
 flac
 
-Note: Microphone recording is supported in the local development version only. The deployed cloud version uses file upload due to server-side audio hardware limitations.
+Note: Microphone recording is supported locally only.
+The deployed cloud version uses file upload due to server-side hardware limitations.
 
-Features
+🛠 Tech Stack
 
-Audio/video file upload
-
-Automatic transcription (Whisper API)
-
-AI-powered task extraction (Claude API)
-
-Structured task formatting:
-
-What needs to be done
-
-Who is responsible
-
-Deadline or timeframe
-
-Interactive checkboxes
-
-Export to CSV
-
-Export to TXT
-
-Clean dark-mode UI
-
-Tech Stack
+Backend
 
 Python
 
 Streamlit
 
-OpenAI Whisper API
+AI Services
 
-Anthropic Claude API
+OpenAI Whisper API (speech-to-text)
+
+Anthropic Claude API (task extraction)
+
+Other
 
 python-dotenv
 
-How It Works
+Structured LLM prompting & response parsing
 
-User uploads an audio file
+🧩 How It Works
+Audio File → Whisper (Transcript) → Claude (Task Extraction) → Structured Tasks → Export
+
+User uploads audio
 
 File is temporarily stored server-side
 
 Whisper generates a transcript
 
-Claude analyzes the transcript and extracts action items
+Claude extracts action items in a structured format
 
-Results are parsed into structured task objects
+Output is parsed into task objects
 
 Tasks are displayed and available for export
 
-Local Development Setup
+🖥 Local Development
 
 Clone the repository:
 
@@ -109,40 +105,42 @@ ANTHROPIC_API_KEY="your_anthropic_key"
 Run the app:
 
 streamlit run app.py
-Deployment
+🚀 Deployment
 
-This project is deployed using Streamlit Cloud.
+Deployed via Streamlit Cloud.
 
-Secrets are stored securely using Streamlit’s built-in Secrets manager in TOML format:
+Secrets are stored securely using the Streamlit Secrets manager:
 
 OPENAI_API_KEY = "your_openai_key"
 ANTHROPIC_API_KEY = "your_anthropic_key"
-Future Improvements
-
-Browser-based microphone recording
-
-Speaker diarization (identify who said what)
-
-Notion/Todoist integration
-
-Automatic calendar follow-up generation
-
-PDF export
-
-Meeting summary generation
-
-Why This Project
+📈 Why This Project Matters
 
 This project demonstrates:
 
-API integration across multiple AI providers
+Multi-API integration
 
-File handling and temporary storage
+Real-world AI workflow design
 
-Structured LLM prompting and response parsing
+Structured LLM prompting and parsing
+
+Secure secrets management
 
 Cloud deployment
 
-Production-style secrets management
+Clean UI/UX implementation
 
-Real-world AI workflow automation
+It solves a real productivity problem by transforming unstructured speech into actionable outputs.
+
+🔮 Future Improvements
+
+Browser-based microphone recording
+
+Speaker diarization (who said what)
+
+Notion / Todoist integration
+
+PDF export
+
+Automated meeting summaries
+
+Calendar follow-up generation
