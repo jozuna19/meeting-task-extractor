@@ -2,5 +2,3 @@ streamlit
 openai
 anthropic
 python-dotenv
-sounddevice
-scipy
